@@ -1,0 +1,86 @@
+services:
+  # База данных PostgreSQL
+  db:
+    image: postgres:15-alpine
+    restart: always
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${NAME}
+      POSTGRES_USER: ${USER}
+      POSTGRES_PASSWORD: ${PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432" # Доступно только внутри docker-сети
+
+  # Redis для Celery
+  redis:
+    image: redis:7-alpine
+    restart: always
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379" # Доступно только внутри docker-сети
+
+  # Django приложение (используем gunicorn для продакшена)
+  web:
+    build: .
+    restart: always
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+    expose:
+      - "8000"
+
+  # Celery Worker (обработка задач)
+  celery:
+    build: .
+    restart: always
+    command: celery -A config worker -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
+  # Celery Beat (планировщик задач)
+  celery-beat:
+    build: .
+    restart: always
+    command: celery -A config beat -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - redis
+
+  # Nginx для раздачи статики и проксирования запросов
+  nginx:
+    image: nginx:alpine
+    restart: always
+    ports:
+      - "80:80" # Внешний порт (например, для браузера)
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - static_volume:/app/staticfiles
+    depends_on:
+      - web
+
+volumes:
+  postgres_data: # Сохранение данных БД
+  redis_data:    # Сохранение данных Redis
+  static_volume: # Общий том для статики между web и nginx

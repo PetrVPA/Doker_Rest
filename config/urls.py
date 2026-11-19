@@ -2,6 +2,7 @@
 from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import path, include
+from django.views.generic import RedirectView
 from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework import permissions
@@ -27,6 +28,7 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path('', RedirectView.as_view(url='/swagger/', permanent=False)),
     path('', include('study.urls', namespace='study')),
     path('student/', include('users.urls', namespace='users')),
     path('api/token/', TokenObtainPairView.as_view(serializer_class=CustomTokenObtainPairSerializer), name='token_obtain_pair'),
